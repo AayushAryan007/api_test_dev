@@ -2,9 +2,11 @@ from django.contrib import messages
 from django.shortcuts import render,redirect, get_object_or_404
 
 from rest_framework_simplejwt.tokens import RefreshToken
+
+from .decorators import book_owner_required
 from .auth import CookieJWTAuthentication
 from .models import Book
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -32,24 +34,36 @@ class BookListCreateAPIView(APIView):
     
     # create a book
     def post(self, req):
-        data = {
-            'title': req.POST.get('title'),
-            'author': req.POST.get('author'),
-            'description': req.POST.get('description'),
-        }
-
-        serializer = BookSerializer(data = data)
+        # Use req.data (handles multipart/form-data including files)
+        serializer = BookSerializer(data=req.data, context={'request': req})
         if serializer.is_valid():
-            book = serializer.save()
-            if req.FILES.get('picture'):
-                book.picture = req.FILES['picture']
-                book.save()
-            # return Response(serializer.data, status=status.HTTP_201_CREATED)
+            # Ensure owner is set
+            serializer.save(user=req.user)
             return redirect("book-list-create")
+        print("Serializer errors:", serializer.errors)
+
+        # Keep context type consistent: always pass serializer.data
+        books = Book.objects.all()
+        books_ser = BookSerializer(books, many=True, context={'request': req}).data
+        return render(req, "takebook.html", {"books": books_ser, "errors": serializer.errors})
+        # data = {
+        #     'title': req.POST.get('title'),
+        #     'author': req.POST.get('author'),
+        #     'description': req.POST.get('description'),
+        # }
+
+        # serializer = BookSerializer(data = data)
+        # if serializer.is_valid():
+        #     book = serializer.save(user=req.user)
+        #     if req.FILES.get('picture'):
+        #         book.picture = req.FILES['picture']
+        #         book.save()
+        #     # return Response(serializer.data, status=status.HTTP_201_CREATED)
+        #     return redirect("book-list-create")
         
-        context = {"books": Book.objects.all(), "errors": serializer.errors}
-        return render(req, "takebook.html", context)
-        # return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        # context = {"books": Book.objects.all(), "errors": serializer.errors}
+        # return render(req, "takebook.html", context)
+        # # return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 # @method_decorator(login_required(login_url='login'), name='dispatch')
@@ -81,32 +95,46 @@ class BookDetailAPIView(APIView):
     #     return redirect("book-list-create")
 
 # @method_decorator(login_required(login_url='login'), name='dispatch')
+# @method_decorator(book_owner_required, name='dispatch')
 class BookEditAPIView(APIView):
     authentication_classes = [CookieJWTAuthentication]
     permission_classes = [IsAuthenticated]
+
+    @method_decorator(book_owner_required)
     def get(self, req, id):
-        book = get_object_or_404(Book, id=id)
+        # book = get_object_or_404(Book, id=id)
+        book = getattr(self, 'book')
         serializer = BookSerializer(book, context={'request': req})
         context = {"book": serializer.data}
         return render(req, "editbook.html", context)
     
-    
+    @method_decorator(book_owner_required)
     def post(self, req, id):
-        book = get_object_or_404(Book, id=id)
-        serializer = BookSerializer(book, data=req.data, partial=True)
+        book = getattr(self, 'book')
+        serializer = BookSerializer(book, data=req.data, partial=True, context={'request': req})
         if serializer.is_valid():
             serializer.save()
+            # AJAX-friendly
+            if req.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({"ok": True})
             return redirect("book-list-create")
-        context = {"book": BookSerializer(book).data, "errors": serializer.errors}
-        return render(req, "editbook.html", context)
+        if req.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({"ok": False, "errors": serializer.errors}, status=400)
+        return render(req, "editbook.html", {"book": BookSerializer(book, context={'request': req}).data, "errors": serializer.errors})
+
 
 # @method_decorator(login_required(login_url='login'), name='dispatch')
+# @method_decorator(book_owner_required, name='dispatch')
 class BookDeleteAPIView(APIView):
     authentication_classes = [CookieJWTAuthentication]
     permission_classes = [IsAuthenticated]
+    
+    @method_decorator(book_owner_required)
     def post(self, req, id):
-        book = get_object_or_404(Book, id=id)
+        book = getattr(self, 'book')
         book.delete()
+        if req.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({"ok": True})
         return redirect("book-list-create")
     
 

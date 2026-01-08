@@ -12,6 +12,15 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from pathlib import Path
 
+
+#  uncomment to customize JWT token lifetimes
+# from datetime import timedelta
+
+# SIMPLE_JWT = {
+#     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),   # default = 5 min
+#     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),      # default = 1 day
+# }
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
