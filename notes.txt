@@ -1,0 +1,133 @@
+from django.shortcuts import render, redirect, get_object_or_404
+from .models import Book
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .serializers import BookSerializer
+
+
+class BookListCreateAPIView(APIView):
+    def get(self, req):
+        books = Book.objects.all()
+        if req.headers.get('Accept') == 'application/json':
+            serializer = BookSerializer(books, many=True)
+            return Response(serializer.data)
+        return render(req, "takebook.html", {"books": books})
+    
+    def post(self, req):
+        if req.headers.get('Content-Type') == 'application/json':
+            serializer = BookSerializer(data=req.data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            title = req.POST.get("title")
+            author = req.POST.get("author")
+            description = req.POST.get("description")
+            picture = req.FILES.get("picture")
+            Book.objects.create(title=title, author=author, description=description, picture=picture)
+            return redirect("book-list-create")
+
+
+class BookDetailAPIView(APIView):
+    def get(self, req, id):
+        book = get_object_or_404(Book, id=id)
+        if req.headers.get('Accept') == 'application/json':
+            serializer = BookSerializer(book)
+            return Response(serializer.data)
+        return render(req, "mybook.html", {"book": book})
+    
+    def put(self, req, id):
+        book = get_object_or_404(Book, id=id)
+        serializer = BookSerializer(book, data=req.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def post(self, req, id):
+        book = get_object_or_404(Book, id=id)
+        book.title = req.POST.get("title")
+        book.author = req.POST.get("author")
+        book.description = req.POST.get("description")
+        if req.FILES.get("picture"):
+            book.picture = req.FILES.get("picture")
+        book.save()
+        return redirect("book-list-create")
+    
+    def delete(self, req, id):
+        book = get_object_or_404(Book, id=id)
+        book.delete()
+        return redirect("book-list-create")
+
+
+# Edit view
+class BookEditAPIView(APIView):
+    def get(self, req, id):
+        book = get_object_or_404(Book, id=id)
+        return render(req, "editbook.html", {"book": book})
+    
+    def post(self, req, id):
+        book = get_object_or_404(Book, id=id)
+        book.title = req.POST.get("title")
+        book.author = req.POST.get("author")
+        book.description = req.POST.get("description")
+        if req.FILES.get("picture"):
+            book.picture = req.FILES.get("picture")
+        book.save()
+        return redirect("book-list-create")
+
+
+
+
+        ÷/////////////////
+
+
+from django.shortcuts import render,redirect, get_object_or_404
+from .models import Book
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .serializers import BookSerializer
+
+
+class BookListCreateAPIView(APIView):
+    # get all books 
+    def get(self, req):
+        books = Book.objects.all()
+        serializer = BookSerializer(books, many=True)
+        return Response(serializer.data)
+    
+    # create a book
+    def post(self, req):
+        serializer = BookSerializer(data = req.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+class BookDetailAPIView(APIView):
+    # get, put, delete a book by id
+    def get(self, req, id):
+        book = get_object_or_404(Book, id=id)
+        serializer = BookSerializer(book)
+        return Response(serializer.data)
+    
+    def put(self, req, id):
+        book = get_object_or_404(Book, id=id)
+        serializer = BookSerializer(book, data=req.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def delete(self, req, id):
+        book = get_object_or_404(Book, id=id)
+        book.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    
+

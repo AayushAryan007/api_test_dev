@@ -17,13 +17,58 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 from home.views import *
+from account.views import *
+from django.conf import settings
+from django.conf.urls.static import static
 
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+)
 def root(request):
     return HttpResponse("++++++")
 
+
 urlpatterns = [
+    # JWT auth paths
+    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+
+
+    # extra
     path('', root, name='root'),
     path('admin/', admin.site.urls),
     path('home/', hello, name='home'),
     path('test/', test, name='test'),
-]
+    path('foo/', foo, name='foo'),
+    
+
+    # AUTH paths for user
+    path("login/", login_view, name="login"),
+    path("signup/", signup_view, name="signup"),
+    path("logout/", logout_view, name="logout"),
+
+
+
+    # book paths
+    
+    # apiView paths
+    path("api/books/", BookListCreateAPIView.as_view(), name="book-list-create"),
+    path("api/books/<int:id>/", BookDetailAPIView.as_view(), name="book-detail"),
+
+    
+    path('takebook/', BookListCreateAPIView.as_view(), name='book-list-create'),
+    path('deletebook/<int:id>/', BookDeleteAPIView.as_view(), name='deletebook'),
+    path('mybook/<int:id>/', BookDetailAPIView.as_view(), name='book-detail'),
+    path('editbook/<int:id>/', BookEditAPIView.as_view(), name='editbook'),
+
+    
+    #  functional view paths
+    # path('takebook/', takebook, name='takebook'),
+    # path('deletebook/<int:book_id>/', deletebook, name='deletebook'),
+    # path('mybook/<int:id>/', mybook, name='mybook'),
+    # path('editbook/<int:id>/', editbook, name='editbook'),
+]    
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

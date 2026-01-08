@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Add Book</title>
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 2rem; background: #f7f9fb; color: #1f2933; }
+    .navbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 2px solid #e1e7ef; }
+    .navbar h1 { margin: 0; }
+    .logout-btn { padding: 0.5rem 1rem; background: #dc2626; color: #fff; border: none; border-radius: 6px; text-decoration: none; cursor: pointer; font-weight: 600; }
+    .logout-btn:hover { background: #b91c1c; }
+    .container { max-width: 600px; margin: 0 auto; }
+    h1 { margin: 0 0 1.5rem; }
+    .form-card { background: #fff; border: 1px solid #e1e7ef; border-radius: 10px; padding: 2rem; box-shadow: 0 6px 20px -12px rgba(0,0,0,0.25); }
+    .form-group { margin-bottom: 1.5rem; }
+    label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
+    input[type="text"], textarea, input[type="file"] { width: 100%; padding: 0.75rem; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 1rem; font-family: inherit; box-sizing: border-box; }
+    textarea { resize: vertical; min-height: 100px; }
+    button { padding: 0.75rem 1.5rem; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-size: 1rem; font-weight: 600; cursor: pointer; }
+    button:hover { background: #1d4fd8; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1.5rem; }
+    th, td { border: 1px solid #e1e7ef; padding: 0.5rem 0.75rem; text-align: left; vertical-align: top; }
+    th { background: #f3f6fa; font-weight: 600; }
+    .thumb { height: 60px; width: auto; border-radius: 4px; border: 1px solid #e1e7ef; }
+    /* action buttons */
+    .actions { display: flex; gap: 0.5rem; }
+    .btn { display: inline-block; padding: 0.4rem 0.75rem; border-radius: 6px; font-weight: 600; text-decoration: none; color: #fff; }
+    .btn-blue { background: #2563eb; }
+    .btn-blue:hover { background: #1d4fd8; }
+    .btn-red { background: #dc2626; }
+    .btn-red:hover { background: #b91c1c; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="navbar">
+      <h1>Add New Book</h1>
+      <a href="{% url 'logout' %}" class="logout-btn">Logout</a>
+    </div>
+    <div class="form-card">
+      <form method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+        
+        <div class="form-group">
+          <label for="title">Title</label>
+          <input type="text" id="title" name="title" required>
+        </div>
+
+        <div class="form-group">
+          <label for="author">Author</label>
+          <input type="text" id="author" name="author" required>
+        </div>
+
+        <div class="form-group">
+          <label for="description">Description</label>
+          <textarea id="description" name="description" required></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="picture">Book Picture</label>
+          <input type="file" id="picture" name="picture" accept="image/*">
+        </div>
+
+        <button type="submit">Add Book</button>
+      </form>
+    </div>
+     
+    {% if books %}
+      <h2 style="margin-top: 2rem;">Books</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Title</th>
+            <th>Author</th>
+            <th>Description</th>
+            <th>Picture</th>
+            <th>USER</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in books %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td><a href="{% url 'book-detail' b.id %}">{{ b.title }}</a></td>
+            <td>{{ b.author }}</td>
+            <td>{{ b.description|truncatechars:20 }}</td>
+            <td>
+              {% if b.picture %}
+                <img class="thumb" src="{{ b.picture_url }}" alt="{{ b.title }}">
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td>{{ b.user }}</td>
+            <td>
+              <div class="actions">
+                <a class="btn btn-blue" href="{% url 'editbook' b.id %}">Edit</a>
+                <form method="post" action="{% url 'deletebook' b.id %}" style="display:inline;">
+                  {% csrf_token %}
+                  <button class="btn btn-red" type="submit">Delete</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p style="margin-top: 1.5rem;">No books yet.</p>
+    {% endif %}
+  </div>
+</body>
+</html>

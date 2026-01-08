@@ -1,0 +1,30 @@
+{% comment %} {{book}} {% endcomment %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ book.title }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 2rem; background: #f7f9fb; color: #1f2933; }
+    .card { max-width: 720px; margin: 0 auto; background: #fff; border: 1px solid #e1e7ef; border-radius: 12px; padding: 2rem; box-shadow: 0 8px 24px -16px rgba(0,0,0,0.25); }
+    h1 { margin: 0 0 1rem; }
+    .meta { margin: 0 0 1rem; color: #475569; }
+    .desc { white-space: pre-line; line-height: 1.6; }
+    .cover { max-width: 320px; width: 100%; border-radius: 8px; border: 1px solid #e1e7ef; margin-top: 1rem; }
+    a { color: #2563eb; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>{{ book.title }}</h1>
+    <p class="meta"><strong>Author:</strong> {{ book.author }}</p>
+    <p class="desc">{{ book.description }}</p>
+    {% if book.picture_url %}
+      <img class="cover" src="{{ book.picture_url }}" alt="{{ book.title }}">
+    {% endif %}
+    <p style="margin-top:1.5rem;"><a href="{% url 'book-list-create' %}">← Back</a></p>
+  </div>
+</body>
+</html>

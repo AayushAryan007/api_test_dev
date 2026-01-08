@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Edit {{ book.title }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+  <h1>Edit Book</h1>
+  <form method="POST" enctype="multipart/form-data">
+    {% csrf_token %}
+    <div>
+      <label>Title</label>
+      <input type="text" name="title" value="{{ book.title }}" required>
+    </div>
+    <div>
+      <label>Author</label>
+      <input type="text" name="author" value="{{ book.author }}" required>
+    </div>
+    <div>
+      <label>Description</label>
+      <textarea name="description" required>{{ book.description }}</textarea>
+    </div>
+    <div>
+      <label>Picture</label>
+      {% if book.picture %}
+        <p>Current: <img src="{{ book.picture_url}}" alt="{{ book.title }}" style="max-height:80px;"></p>
+      {% endif %}
+      <input type="file" name="picture" accept="image/*">
+    </div>
+    <button type="submit">Save</button>
+    <a href="{% url 'book-list-create' %}">Cancel</a>
+  </form>
+</body>
+</html>
