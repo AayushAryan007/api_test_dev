@@ -3,7 +3,7 @@ from django.shortcuts import render,redirect, get_object_or_404
 
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .decorators import book_owner_required
+# from .decorators import book_owner_required
 from .auth import CookieJWTAuthentication
 from .models import Book
 from django.http import HttpResponse, JsonResponse
@@ -96,25 +96,29 @@ class BookDetailAPIView(APIView):
 
 # @method_decorator(login_required(login_url='login'), name='dispatch')
 # @method_decorator(book_owner_required, name='dispatch')
+# @book_owner_required
 class BookEditAPIView(APIView):
     authentication_classes = [CookieJWTAuthentication]
     permission_classes = [IsAuthenticated]
 
-    @method_decorator(book_owner_required)
     def get(self, req, id):
-        # book = get_object_or_404(Book, id=id)
-        book = getattr(self, 'book')
+        book = get_object_or_404(Book, id=id)
+        # Check ownership
+        if book.user_id != req.user.id:
+            return JsonResponse({'detail': 'Forbidden'}, status=403)
+        
         serializer = BookSerializer(book, context={'request': req})
-        context = {"book": serializer.data}
-        return render(req, "editbook.html", context)
-    
-    @method_decorator(book_owner_required)
+        return render(req, "editbook.html", {"book": serializer.data})
+
     def post(self, req, id):
-        book = getattr(self, 'book')
+        book = get_object_or_404(Book, id=id)
+        # Check ownership
+        if book.user_id != req.user.id:
+            return JsonResponse({'detail': 'Forbidden'}, status=403)
+        
         serializer = BookSerializer(book, data=req.data, partial=True, context={'request': req})
         if serializer.is_valid():
             serializer.save()
-            # AJAX-friendly
             if req.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return JsonResponse({"ok": True})
             return redirect("book-list-create")
@@ -123,15 +127,16 @@ class BookEditAPIView(APIView):
         return render(req, "editbook.html", {"book": BookSerializer(book, context={'request': req}).data, "errors": serializer.errors})
 
 
-# @method_decorator(login_required(login_url='login'), name='dispatch')
-# @method_decorator(book_owner_required, name='dispatch')
 class BookDeleteAPIView(APIView):
     authentication_classes = [CookieJWTAuthentication]
     permission_classes = [IsAuthenticated]
     
-    @method_decorator(book_owner_required)
     def post(self, req, id):
-        book = getattr(self, 'book')
+        book = get_object_or_404(Book, id=id)
+        # Check ownership
+        if book.user_id != req.user.id:
+            return JsonResponse({'detail': 'Forbidden'}, status=403)
+        
         book.delete()
         if req.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return JsonResponse({"ok": True})
