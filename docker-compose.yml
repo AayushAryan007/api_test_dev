@@ -1,0 +1,42 @@
+version: "3.8"
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: proj1
+      MYSQL_USER: proj1user
+      MYSQL_PASSWORD: proj1pass
+      MYSQL_ROOT_PASSWORD: rootpass
+    volumes:
+      - db_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    networks:
+      - projnet
+
+  web:
+    build: .
+    command: gunicorn proj1.wsgi:application --bind 0.0.0.0:8000
+    volumes:
+      - .:/code
+      - ./media:/code/media
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: db
+      DB_NAME: proj1
+      DB_USER: proj1user
+      DB_PASS: proj1pass
+      DB_PORT: "3306"
+      DJANGO_SETTINGS_MODULE: proj1.settings
+    depends_on:
+      - db
+    networks:
+      - projnet
+
+volumes:
+  db_data:
+
+networks:
+  projnet:

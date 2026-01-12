@@ -131,3 +131,74 @@ class BookDetailAPIView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
     
 
+
+    ÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷
+
+    GitHub Copilot
+
+Summary of today’s work (concise)
+
+- Project state
+  - Django project with built-in User model, Book model, JWT auth; initial DB = sqlite (db.sqlite3); media stored in ./media.
+
+- Dockerization
+  - Added Dockerfile (switched to python:3.12-slim to match Django 6) and requirements.txt.
+  - Created docker-compose.yml with two services: db (mysql:8.0) and web (Django/gunicorn).
+  - Mounted ./media as a volume and passed DB credentials via environment vars.
+
+- Settings & DB driver
+  - settings.py updated to use MySQL via env vars (DB_HOST, DB_NAME, DB_USER, DB_PASS, DB_PORT).
+  - Local mysqlclient install failed (pkg-config missing); two options used: install native deps via Homebrew or use PyMySQL with pymysql.install_as_MySQLdb() shim.
+
+- Data migration from SQLite -> MySQL
+  - Dumped sqlite data: python manage.py dumpdata --natural-foreign --natural-primary --exclude auth.permission --exclude contenttypes > data.json
+  - Archived media: tar -czf media.tar.gz media/
+  - Brought up MySQL container: docker compose up --detach db
+  - Built web image and applied migrations to MySQL: docker compose run --rm web python manage.py migrate
+  - Loaded data into MySQL: docker compose run --rm web python manage.py loaddata data.json
+  - Restored media into mounted volume (untar into ./media)
+
+- Troubleshooting during build/run
+  - Dockerfile apt-get failed due to DNS/network inside build; resolved by restarting Docker Desktop, setting Docker daemon DNS (8.8.8.8 / 1.1.1.1) or using build with --network/host; rebuilt with docker compose build --no-cache --progress=plain web.
+  - Fixed Django version vs Python mismatch by using python:3.12-slim base image.
+  - Removed/ignored docker-compose `version:` warning.
+
+- Verification
+  - Confirmed MySQL tables: docker compose exec db mysql -u root -prootpass -e "USE proj1; SHOW TABLES;"
+  - Verified app running: docker compose up --detach web and tested JWT auth + Book CRUD endpoints.
+
+If a short command summary is needed (startup sequence), say so.
+
+
+
+
+//////////////////////
+
+
+# 1. Build images
+docker compose build --no-cache web
+
+# 2. Start only the database and wait until ready
+docker compose up --detach db
+docker compose logs -f db
+
+# (optional) quick DB health check
+docker compose exec db mysql -u root -prootpass -e "SELECT 1;"
+
+# 3. Apply migrations on the MySQL database
+docker compose run --rm web python manage.py migrate
+
+# 4. Load dumped data (if you have data.json)
+docker compose run --rm web python manage.py loaddata data.json
+
+# 5. Restore media locally (if you have media archive)
+tar -xzf media.tar.gz -C ./media
+
+# 6. Start the web service
+docker compose up --detach web
+
+# 7. Follow logs and test
+docker compose logs -f web
+
+# 8. Stop & remove services (when needed)
+docker compose down -v
