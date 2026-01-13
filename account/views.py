@@ -1,23 +1,27 @@
 from django.contrib import messages
 from django.shortcuts import render,redirect, get_object_or_404
-
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 from rest_framework_simplejwt.tokens import RefreshToken
 
 # from .decorators import book_owner_required
 from .auth import CookieJWTAuthentication
-from .models import Book
+from .models import Book, BulkUploadTask
 from django.http import HttpResponse, JsonResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .serializers import BookSerializer
+from .serializers import BookSerializer, BulkUploadTaskSerializer
 from django.contrib.auth.models import User
 from django.template.loader import render_to_string
 from django.contrib.auth import authenticate, login , logout
 from django.contrib.auth.decorators import login_required
-from django.utils.decorators import method_decorator
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from .tasks import process_book_upload
+import csv 
+import uuid
+from io import StringIO
 
 
 # @method_decorator(login_required(login_url='login'), name='dispatch')
@@ -146,35 +150,31 @@ class BookDeleteAPIView(APIView):
 
 # ///////////////////////////////////////////////////
 # User auth apis (functional)
-
+@csrf_exempt
 def login_view(req):
+    """Login view - CSRF exempt for API usage"""
     if req.method == "POST":
-        username= req.POST.get("username")
-        password= req.POST.get("password")
+        username = req.POST.get("username")
+        password = req.POST.get("password")
         user = authenticate(req, username=username, password=password)
-        # if user is not None:
-        #     login(req, user)
-        #     messages.success(req, "Login successful!")
-        #     return redirect("book-list-create")
-        # else:
-        #     messages.error(req, "Invalid credentials. Please try again.")
-        #     return render(req, "login.html")
-
+        
         if user is None:
             messages.error(req, "Invalid credentials. Please try again.")
             return render(req, "login.html")
+        
         refresh = RefreshToken.for_user(user)
         resp = redirect("book-list-create")
-        # set HTTP-only cookies
         resp.set_cookie('access', str(refresh.access_token), httponly=True, samesite='Lax', secure=False)
         resp.set_cookie('refresh', str(refresh), httponly=True, samesite='Lax', secure=False)
         messages.success(req, "Login successful!")
         return resp
         
     return render(req, "login.html")
-    #return HttpResponse("Login View - To be implemented")
+
+
 
 def signup_view(req):
+    """Signup view - CSRF exempt"""
     if req.method == "POST":
         username = req.POST.get("username")
         email = req.POST.get("email")
@@ -262,3 +262,114 @@ def logout_view(req):
 #         return redirect("mybook", id=book.id)
 #     context = {"book": book}
 #     return render(req, "editbook.html", context)
+
+
+
+
+
+#HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+
+
+#  bulk upload and bg job views
+
+
+class BulkUploadBooksAPIView(APIView):
+    authentication_classes = [CookieJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, req):
+        file = req.FILES.get('file')
+        if not file:
+            return Response({'error': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        file_content = file.read().decode('utf-8').strip()  # Strip whitespace
+        print(f"File content:\n{repr(file_content)}")  # DEBUG - use repr to see hidden chars
+        
+        # Split by newline manually to debug
+        lines = file_content.split('\n')
+        print(f"Total lines: {len(lines)}")
+        for i, line in enumerate(lines):
+            print(f"Line {i}: {repr(line)}")
+    
+        reader = csv.DictReader(StringIO(file_content))
+        rows_list = list(reader)
+        print(f"Total rows parsed: {len(rows_list)}")  # Should be 3
+    
+        batch_id = str(uuid.uuid4())
+        task_ids = []
+        
+        for row in rows_list:
+            print(f"Processing row: {row}")
+            task = BulkUploadTask.objects.create(
+                task_id=uuid.uuid4(),
+                batch_id=batch_id,
+                title=row.get('title'),
+                author=row.get('author'),
+                description=row.get('description', ''),
+                status='pending'
+                # Remove: user=req.user
+            )
+            celery_task = process_book_upload.delay(str(task.task_id), req.user.id)
+            task.celery_task_id = celery_task.id
+            task.save()
+            task_ids.append(str(task.task_id))
+        
+        return Response({
+            'batch_id': batch_id,
+            'task_ids': task_ids,
+            'total_rows': len(task_ids)
+        }, status=status.HTTP_202_ACCEPTED)
+        
+
+class TaskStatusAPIView(APIView):
+    """
+    GET: Check status of a single task
+    ?task_id=<uuid>
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        task_id = request.query_params.get('task_id')
+        if not task_id:
+            return Response({'error': 'task_id required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            task = BulkUploadTask.objects.get(task_id=task_id)
+            serializer = BulkUploadTaskSerializer(task)
+            return Response(serializer.data)
+        except BulkUploadTask.DoesNotExist:
+            return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
+       
+
+class BatchStatusAPIView(APIView):
+    """
+    GET: Check status of all tasks in a batch
+    ?batch_id=<uuid>
+    """
+
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        batch_id = request.query_params.get('batch_id')
+        if not batch_id:
+            return Response({'error': 'batch_id required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            tasks = BulkUploadTask.objects.filter(batch_id=batch_id)
+            
+            # Summary stats
+            summary = {
+                'batch_id': batch_id,
+                'total': tasks.count(),
+                'pending': tasks.filter(status='pending').count(),
+                'processing': tasks.filter(status='processing').count(),
+                'success': tasks.filter(status='completed').count(),
+                'failed': tasks.filter(status='failed').count(),
+                'tasks': BulkUploadTaskSerializer(tasks, many=True).data
+            }
+            
+            return Response(summary)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+

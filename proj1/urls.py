@@ -68,7 +68,15 @@ urlpatterns = [
     # path('deletebook/<int:book_id>/', deletebook, name='deletebook'),
     # path('mybook/<int:id>/', mybook, name='mybook'),
     # path('editbook/<int:id>/', editbook, name='editbook'),
+
+
+    # bulk upload endpoints
+    path('bulk-upload/', BulkUploadBooksAPIView.as_view(), name='bulk-upload'),
+    path('task-status/', TaskStatusAPIView.as_view(), name='task-status'),
+    path('batch-status/', BatchStatusAPIView.as_view(), name='batch-status'),
+
 ]    
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+

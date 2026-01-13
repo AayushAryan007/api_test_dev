@@ -1,6 +1,10 @@
 Django==6.0
 djangorestframework
 djangorestframework-simplejwt
-mysqlclient
+# mysqlclient
+PyMySQL
+cryptography
 gunicorn
 Pillow
+celery
+redis

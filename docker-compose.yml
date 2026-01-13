@@ -15,6 +15,16 @@ services:
     networks:
       - projnet
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - projnet
+    volumes:
+      - redis_data:/data
+
   web:
     build: .
     command: gunicorn proj1.wsgi:application --bind 0.0.0.0:8000
@@ -30,13 +40,37 @@ services:
       DB_PASS: proj1pass
       DB_PORT: "3306"
       DJANGO_SETTINGS_MODULE: proj1.settings
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
     depends_on:
       - db
+      - redis
+    networks:
+      - projnet
+
+  celery_worker:
+    build: .
+    command: celery -A proj1 worker --loglevel=info
+    volumes:
+      - .:/code
+    environment:
+      DB_HOST: db
+      DB_NAME: proj1
+      DB_USER: proj1user
+      DB_PASS: proj1pass
+      DB_PORT: "3306"
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DJANGO_SETTINGS_MODULE: proj1.settings
+    depends_on:
+      - db
+      - redis
     networks:
       - projnet
 
 volumes:
   db_data:
+  redis_data:
 
 networks:
   projnet:

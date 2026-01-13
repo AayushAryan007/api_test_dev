@@ -202,3 +202,53 @@ docker compose logs -f web
 
 # 8. Stop & remove services (when needed)
 docker compose down -v
+
+//////////////////////////////////////////
+Switch from Docker Desktop to Colima — Summary
+What we did
+1. Quit Docker Desktop
+
+osascript -e 'tell application "Docker" to quit' || true
+killall Docker || true
+
+2. Install Colima + Docker CLI + docker-compose via Homebrew
+
+brew update
+brew install colima docker docker-compose
+
+3. Start Colima VM with resource allocation
+
+colima start --cpu 4 --memory 6 --disk 60
+
+Colima creates a lightweight VM using Lima/QEMU to run Docker daemon.
+Resources: 4 CPUs, 6GB RAM, 60GB disk (adjust as needed).
+
+4. Verify Colima is running and Docker CLI connects to it
+
+colima status
+docker version
+docker info
+
+Docker CLI now points to Colima's socket (unix:///Users/<user>/.colima/default/docker.sock) instead of Docker Desktop's.
+
+docker compose build --no-cache web
+docker compose up --detach db
+docker compose run --rm web python manage.py migrate
+docker compose run --rm web python manage.py loaddata data.json
+tar -xzf media.tar.gz -C ./media
+docker compose up --detach web
+
+/////////////////////////////
+
+Task 3 ->
+now in this project i want to be able to bulk upload the books data,
+i will be using csv for tis bulk upload. the csv file data will be taken as inout and 
+each row will create a single entry in the book database, 
+lets say i  have 100 entries in the csv file and to upload them i will have a delay of 
+0.5 second for each entry, means 60 entries must take atleast 30 second to upload to 
+be created in db. nowwhile this upload happens, in the delay time a task id is created for the 
+entry , we have to expose a status api , for every task id we should get a staus using that api 
+if the upload was successful or it failed or stll going on., 
+there must also be an api that returns
+status of all entries task id in one place as they are uploaded
+
