@@ -150,7 +150,7 @@ class BookDeleteAPIView(APIView):
 
 # ///////////////////////////////////////////////////
 # User auth apis (functional)
-@csrf_exempt
+# @csrf_exempt
 def login_view(req):
     """Login view - CSRF exempt for API usage"""
     if req.method == "POST":
@@ -283,7 +283,7 @@ class BulkUploadBooksAPIView(APIView):
             return Response({'error': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)
         
         file_content = file.read().decode('utf-8').strip()  # Strip whitespace
-        print(f"File content:\n{repr(file_content)}")  # DEBUG - use repr to see hidden chars
+        # print(f"File content:\n{repr(file_content)}")  
         
         # Split by newline manually to debug
         lines = file_content.split('\n')
@@ -293,7 +293,7 @@ class BulkUploadBooksAPIView(APIView):
     
         reader = csv.DictReader(StringIO(file_content))
         rows_list = list(reader)
-        print(f"Total rows parsed: {len(rows_list)}")  # Should be 3
+        # print(f"Total rows parsed: {len(rows_list)}")
     
         batch_id = str(uuid.uuid4())
         task_ids = []

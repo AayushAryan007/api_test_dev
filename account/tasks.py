@@ -14,12 +14,15 @@ def process_book_upload(self, task_id_str, user_id):
     user_id: User ID
     """
     try:
+        # Fetch BulkUploadTask record from DB
         task = BulkUploadTask.objects.get(task_id=task_id_str)
+
+        # Mark task as processing
         task.status = 'processing'
         task.celery_task_id = self.request.id
         task.save()
         
-        time.sleep(0.5)  # simulate work
+        time.sleep(0.5)  # simulate delay per entry
         
         user = User.objects.get(id=user_id)
         

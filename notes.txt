@@ -252,3 +252,34 @@ if the upload was successful or it failed or stll going on.,
 there must also be an api that returns
 status of all entries task id in one place as they are uploaded
 
+
+User (Postman)
+    ↓
+POST /bulk-upload/ [CSV file]
+    ↓
+LoginAPIView (JWT auth)
+    ↓
+BulkUploadBooksAPIView.post()
+    ├─ Parse CSV rows
+    ├─ Create BulkUploadTask records (status='pending')
+    ├─ Enqueue Celery tasks to Redis
+    └─ Return batch_id + task_ids (HTTP 202 Accepted)
+    ↓
+Redis Queue (stores pending tasks)
+    ↓
+Celery Worker (listens to Redis)
+    ├─ Pull task from queue
+    ├─ Execute process_book_upload(task_id)
+    │  ├─ Sleep 0.5s (simulated delay)
+    │  ├─ Create Book entry
+    │  ├─ Update BulkUploadTask (status='success')
+    │  └─ Store result in Redis
+    └─ Next task...
+    ↓
+GET /task-status/?task_id= [User polls]
+    └─ TaskStatusAPIView queries BulkUploadTask
+       └─ Return status from DB (success/pending/failed)
+    ↓
+GET /batch-status/?batch_id= [User polls]
+    └─ BatchStatusAPIView aggregates all tasks
+       └─ Return summary (total/pending/success/failed)
