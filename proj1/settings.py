@@ -60,11 +60,13 @@ INSTALLED_APPS = [
 ]
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'account.auth.CookieJWTAuthentication',
-    ),
+    # Disable DRF's default JWT authentication so our custom
+    # `account.middleware.CustomAuthMiddleware` is the single source
+    # of truth for token authentication during the request/response
+    # cycle. Views may still perform checks against `request.user`.
+    'DEFAULT_AUTHENTICATION_CLASSES': (),
     'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.AllowAny',
     ),
 }
 

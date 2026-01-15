@@ -5,7 +5,7 @@ from django.utils.decorators import method_decorator
 # from rest_framework_simplejwt.tokens import RefreshToken
 
 # from .decorators import book_owner_required
-from .auth import CookieJWTAuthentication
+# CookieJWTAuthentication removed — using custom middleware for auth
 from .models import Book, BulkUploadTask, AuthToken
 from django.http import HttpResponse, JsonResponse
 from rest_framework.views import APIView
