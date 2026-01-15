@@ -5,7 +5,7 @@ from django.utils.decorators import method_decorator
 # from rest_framework_simplejwt.tokens import RefreshToken
 
 # from .decorators import book_owner_required
-from .auth import CookieJWTAuthentication, AuthTokenAuthentication
+from .auth import CookieJWTAuthentication
 from .models import Book, BulkUploadTask, AuthToken
 from django.http import HttpResponse, JsonResponse
 from rest_framework.views import APIView
@@ -359,21 +359,39 @@ def logout_view(req):
 
 
 class BulkUploadBooksAPIView(APIView):
-    authentication_classes = [AuthTokenAuthentication]
-    permission_classes = [IsAuthenticated]
+    authentication_classes = []
+    permission_classes = []
+    
+    def _authenticate_token(self, req):
+        """Authenticate request using Bearer token in Authorization header."""
+        auth_header = req.META.get('HTTP_AUTHORIZATION', '')
+        token_str = auth_header[7:] if auth_header.startswith('Bearer ') else None
+        print(f"DEBUG bulk-upload auth: header={auth_header}, token_str={token_str}")
+
+        if not token_str:
+            return None, Response({'error': 'Missing or invalid Authorization header'}, status=401)
+
+        try:
+            token_obj = AuthToken.objects.get(token=token_str)
+        except AuthToken.DoesNotExist:
+            return None, Response({'error': 'Invalid token'}, status=401)
+
+        if not token_obj.is_valid() or not token_obj.user.is_active:
+            return None, Response({'error': 'Token expired or inactive'}, status=401)
+
+        return token_obj.user, None
 
     def get(self, req):
-        # At this point req.user is set by AuthTokenAuthentication
-        if not req.user or not req.user.is_authenticated:
-            if req.headers.get('Accept') == 'application/json':
-                return Response({'error': 'Authentication required'}, status=401)
-            return redirect('login')
-        # Render upload form
-        return render(req, "bulk_upload.html", {})
-
+        user, error_response = self._authenticate_token(req)
+        if error_response:
+            return error_response
+        # Render upload form for authenticated user
+        return render(req, "bulk_upload.html", {"user": user})
+    
     def post(self, req):
-        if not req.user or not req.user.is_authenticated:
-            return Response({'error': 'Authentication required'}, status=401)
+        user, error_response = self._authenticate_token(req)
+        if error_response:
+            return error_response
         file = req.FILES.get('file')
         if not file:
             return Response({'error': 'No file provided'}, status=400)
@@ -403,7 +421,7 @@ class BulkUploadBooksAPIView(APIView):
             )
             
             # Enqueue task for authenticated user
-            celery_task = process_book_upload.delay(str(task.task_id), req.user.id)
+            celery_task = process_book_upload.delay(str(task.task_id), user.id)
             task.celery_task_id = celery_task.id
             task.save()
             valid_rows += 1
