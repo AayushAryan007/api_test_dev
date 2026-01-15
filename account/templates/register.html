@@ -12,7 +12,7 @@
     {% endfor %}
   {% endif %}
   <form method="POST">
-    {% csrf_token %}
+    {% comment %} {% csrf_token %} {% endcomment %}
     <div>
       <label>Username</label>
       <input type="text" name="username" required>

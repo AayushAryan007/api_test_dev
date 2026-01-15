@@ -283,3 +283,23 @@ GET /task-status/?task_id= [User polls]
 GET /batch-status/?batch_id= [User polls]
     └─ BatchStatusAPIView aggregates all tasks
        └─ Return summary (total/pending/success/failed)
+
+
+
+
+////////////////////////////////////
+task 4->
+we have to switch from csrf to authentication token,
+the token will contain detail like status, messgae, token , active or not,
+we need a middleware that will help se generate that auth token on login signup
+the token generation will be using uuid4 and will be of lenght 64 character
+need data like user identity (hash , signature), token validity, expiration, 
+optional(permission , scope), 
+this middleware is important as now this will sit between every request response cycle for authorisation 
+using the auth token(based on its presence, expiration, active state)
+each request will validate the auth toke like
+request.data.{profile} -> user authenticated?
+so now wehn i use postman for login api using my username and password
+i will be getting a auth token using middleare which will be in my middleware, and. when i send any request or 
+response composeit first goes through the middleware to validate the auth token
+

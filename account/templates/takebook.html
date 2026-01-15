@@ -129,12 +129,18 @@
     }
 
     // Get CSRF token from cookie
+    {% comment %} function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop().split(';').shift();
+    }
+    const csrftoken = getCookie('csrftoken'); {% endcomment %}
     function getCookie(name) {
       const value = `; ${document.cookie}`;
       const parts = value.split(`; ${name}=`);
       if (parts.length === 2) return parts.pop().split(';').shift();
     }
-    const csrftoken = getCookie('csrftoken');
+    const authToken = getCookie('auth_token');
 
     // Intercept Edit clicks: check permission via AJAX; navigate only if allowed
     document.addEventListener('click', async (e) => {
@@ -144,15 +150,16 @@
       try {
         const res = await fetch(a.href, {
           method: 'GET',
-          headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'text/html' },
-          credentials: 'same-origin'
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Accept': 'text/html',
+          },
+          credentials: 'same-origin',
         });
-        if (res.status === 200) {
+        if (res.ok) {
           window.location = a.href;
-        } else if (res.status === 403) {
-          showAlert('You can only edit your own books');
         } else {
-          showAlert('Unable to open edit page');
+          showAlert('Permission denied');
         }
       } catch (err) {
         showAlert('Network error');
@@ -169,15 +176,13 @@
         const res = await fetch(btn.dataset.url, {
           method: 'POST',
           headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRFToken': csrftoken
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
           },
-          credentials: 'same-origin'
+          credentials: 'same-origin',
         });
         if (res.ok) {
-          row.parentNode.removeChild(row);
-        } else if (res.status === 403) {
-          showAlert('You can only delete your own books');
+          row.remove();
         } else {
           showAlert('Delete failed');
         }

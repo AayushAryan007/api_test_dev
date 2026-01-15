@@ -2,11 +2,11 @@ from django.contrib import messages
 from django.shortcuts import render,redirect, get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
-from rest_framework_simplejwt.tokens import RefreshToken
+# from rest_framework_simplejwt.tokens import RefreshToken
 
 # from .decorators import book_owner_required
-from .auth import CookieJWTAuthentication
-from .models import Book, BulkUploadTask
+from .auth import CookieJWTAuthentication, AuthTokenAuthentication
+from .models import Book, BulkUploadTask, AuthToken
 from django.http import HttpResponse, JsonResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -26,28 +26,36 @@ from io import StringIO
 
 # @method_decorator(login_required(login_url='login'), name='dispatch')
 class BookListCreateAPIView(APIView):
-    authentication_classes = [CookieJWTAuthentication]
-    permission_classes = [IsAuthenticated]
+    authentication_classes = []  # Disable DRF auth
+    permission_classes = []      # Disable DRF permissions
+    
     # get all books 
     def get(self, req):
-        books = Book.objects.all()
+        if not req.user.is_authenticated:
+            if req.headers.get('Accept') == 'application/json':
+                return Response({'error': 'Authentication required'}, status=401)
+            return redirect('login')  # Or render error page
+        
+        books = Book.objects.filter(user=req.user)  # Filter by user for security
         serializer = BookSerializer(books, many=True, context={'request': req})
-        # return Response(serializer.data)
+        
+        # If API request, return JSON
+        if req.headers.get('Accept') == 'application/json':
+            return Response(serializer.data)
+        
+        # Else, render HTML
         context = {"books": serializer.data}
         return render(req, "takebook.html", context)
     
     # create a book
     def post(self, req):
-        # Use req.data (handles multipart/form-data including files)
         serializer = BookSerializer(data=req.data, context={'request': req})
         if serializer.is_valid():
-            # Ensure owner is set
             serializer.save(user=req.user)
             return redirect("book-list-create")
-        print("Serializer errors:", serializer.errors)
-
-        # Keep context type consistent: always pass serializer.data
-        books = Book.objects.all()
+        
+        # Filter books for context
+        books = Book.objects.filter(user=req.user)
         books_ser = BookSerializer(books, many=True, context={'request': req}).data
         return render(req, "takebook.html", {"books": books_ser, "errors": serializer.errors})
         # data = {
@@ -72,15 +80,27 @@ class BookListCreateAPIView(APIView):
 
 # @method_decorator(login_required(login_url='login'), name='dispatch')
 class BookDetailAPIView(APIView):
-    authentication_classes = [CookieJWTAuthentication]
-    permission_classes = [IsAuthenticated]
+    authentication_classes = []
+    permission_classes = []
+    
     # get, put, delete a book by id
     def get(self, req, id):
         book = get_object_or_404(Book, id=id)
-        serializer = BookSerializer(book)
+        # Check ownership
+        if book.user != req.user:
+            if req.headers.get('Accept') == 'application/json':
+                return Response({'detail': 'Forbidden'}, status=403)
+            return render(req, "mybook.html", {"error": "Forbidden"})
+        
+        serializer = BookSerializer(book, context={'request': req})
+        
+        # If API request, return JSON
+        if req.headers.get('Accept') == 'application/json':
+            return Response(serializer.data)
+        
+        # Else, render HTML
         context = {"book": serializer.data}
         return render(req, "mybook.html", context)
-        # return Response(serializer.data)
     
     # def put(self, req, id):
     #     book = get_object_or_404(Book, id=id)
@@ -102,23 +122,33 @@ class BookDetailAPIView(APIView):
 # @method_decorator(book_owner_required, name='dispatch')
 # @book_owner_required
 class BookEditAPIView(APIView):
-    authentication_classes = [CookieJWTAuthentication]
-    permission_classes = [IsAuthenticated]
+    authentication_classes = []
+    permission_classes = []
 
     def get(self, req, id):
         book = get_object_or_404(Book, id=id)
         # Check ownership
-        if book.user_id != req.user.id:
-            return JsonResponse({'detail': 'Forbidden'}, status=403)
+        if book.user != req.user:
+            if req.headers.get('Accept') == 'application/json':
+                return Response({'detail': 'Forbidden'}, status=403)
+            return render(req, "editbook.html", {"error": "Forbidden"})
         
         serializer = BookSerializer(book, context={'request': req})
+        
+        # If API request, return JSON
+        if req.headers.get('Accept') == 'application/json':
+            return Response(serializer.data)
+        
+        # Else, render HTML
         return render(req, "editbook.html", {"book": serializer.data})
 
     def post(self, req, id):
         book = get_object_or_404(Book, id=id)
         # Check ownership
-        if book.user_id != req.user.id:
-            return JsonResponse({'detail': 'Forbidden'}, status=403)
+        if book.user != req.user:
+            if req.headers.get('Accept') == 'application/json':
+                return Response({'detail': 'Forbidden'}, status=403)
+            return render(req, "editbook.html", {"book": BookSerializer(book, context={'request': req}).data, "error": "Forbidden"})
         
         serializer = BookSerializer(book, data=req.data, partial=True, context={'request': req})
         if serializer.is_valid():
@@ -126,19 +156,24 @@ class BookEditAPIView(APIView):
             if req.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return JsonResponse({"ok": True})
             return redirect("book-list-create")
+        
         if req.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return JsonResponse({"ok": False, "errors": serializer.errors}, status=400)
+        
+        # Render with errors
         return render(req, "editbook.html", {"book": BookSerializer(book, context={'request': req}).data, "errors": serializer.errors})
 
 
 class BookDeleteAPIView(APIView):
-    authentication_classes = [CookieJWTAuthentication]
-    permission_classes = [IsAuthenticated]
+    authentication_classes = []
+    permission_classes = []
     
     def post(self, req, id):
         book = get_object_or_404(Book, id=id)
         # Check ownership
-        if book.user_id != req.user.id:
+        if book.user != req.user:
+            if req.headers.get('Accept') == 'application/json':
+                return Response({'detail': 'Forbidden'}, status=403)
             return JsonResponse({'detail': 'Forbidden'}, status=403)
         
         book.delete()
@@ -150,7 +185,7 @@ class BookDeleteAPIView(APIView):
 
 # ///////////////////////////////////////////////////
 # User auth apis (functional)
-# @csrf_exempt
+@csrf_exempt
 def login_view(req):
     """Login view - CSRF exempt for API usage"""
     if req.method == "POST":
@@ -162,17 +197,31 @@ def login_view(req):
             messages.error(req, "Invalid credentials. Please try again.")
             return render(req, "login.html")
         
-        refresh = RefreshToken.for_user(user)
+        token_obj = AuthToken.create_token(user, expiration_hours=24)
+
+        # For API: return JSON with token
+        if req.headers.get('Accept') == 'application/json' or req.headers.get('Content-Type') == 'application/json':
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Login successful',
+                'token': token_obj.token,
+                'expires_at': token_obj.expires_at.isoformat(),
+                'user_id': user.id,
+                'username': user.username,
+                'permissions': token_obj.permissions,
+            })
+        
+        
+        # refresh = RefreshToken.for_user(user)
         resp = redirect("book-list-create")
-        resp.set_cookie('access', str(refresh.access_token), httponly=True, samesite='Lax', secure=False)
-        resp.set_cookie('refresh', str(refresh), httponly=True, samesite='Lax', secure=False)
+        resp.set_cookie('auth_token', token_obj.token, httponly=True, samesite='Strict', secure=False)
         messages.success(req, "Login successful!")
         return resp
         
     return render(req, "login.html")
 
 
-
+@csrf_exempt
 def signup_view(req):
     """Signup view - CSRF exempt"""
     if req.method == "POST":
@@ -201,8 +250,26 @@ def signup_view(req):
             password=password1
         )
          
-        messages.success(req, "Account created successfully! Please login.")
-        return redirect("login")
+        # Generate custom auth token
+        token_obj = AuthToken.create_token(user, expiration_hours=24)
+        
+
+        # For API: return JSON
+        if req.headers.get('Accept') == 'application/json':
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Signup successful',
+                'token': token_obj.token,
+                'expires_at': token_obj.expires_at.isoformat(),
+                'user_id': user.id,
+                'username': user.username,
+            }, status=201)
+        
+        # For web: set cookie and redirect
+        resp = redirect("book-list-create")
+        resp.set_cookie('auth_token', token_obj.token, httponly=True, samesite='Lax')
+        messages.success(req, "Signup successful!")
+        return resp
 
 
 
@@ -210,12 +277,30 @@ def signup_view(req):
     #return HttpResponse("Signup View - To be implemented")
 
 
+@csrf_exempt
 def logout_view(req):
-    logout(req)
-    resp = redirect("login")
-    resp.delete_cookie('access')
-    resp.delete_cookie('refresh')
+     # Get token from header or cookie
+    token_str = req.META.get('HTTP_AUTHORIZATION', '')[7:] or req.COOKIES.get('auth_token')
+    
+    if token_str:
+        try:
+            token_obj = AuthToken.objects.get(token=token_str)
+            token_obj.revoke()  # Mark as revoked
+        except AuthToken.DoesNotExist:
+            pass  # Token already invalid
+    
+    # Clear cookies (custom token + any old JWT leftovers)
+    resp = JsonResponse({'status': 'logged out'})
+    resp.delete_cookie('auth_token')  # Your custom token
+    resp.delete_cookie('access')      # Old JWT
+    resp.delete_cookie('refresh')     # Old JWT
     return resp
+# def logout_view(req):
+#     logout(req)
+#     resp = redirect("login")
+#     resp.delete_cookie('access')
+#     resp.delete_cookie('refresh')
+#     return resp
     #return redirect("login")
     
 # ///////////////////////////////////////////////////
@@ -274,59 +359,68 @@ def logout_view(req):
 
 
 class BulkUploadBooksAPIView(APIView):
-    authentication_classes = [CookieJWTAuthentication]
+    authentication_classes = [AuthTokenAuthentication]
     permission_classes = [IsAuthenticated]
-    
+
+    def get(self, req):
+        # At this point req.user is set by AuthTokenAuthentication
+        if not req.user or not req.user.is_authenticated:
+            if req.headers.get('Accept') == 'application/json':
+                return Response({'error': 'Authentication required'}, status=401)
+            return redirect('login')
+        # Render upload form
+        return render(req, "bulk_upload.html", {})
+
     def post(self, req):
+        if not req.user or not req.user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=401)
         file = req.FILES.get('file')
         if not file:
-            return Response({'error': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        file_content = file.read().decode('utf-8').strip()  # Strip whitespace
-        # print(f"File content:\n{repr(file_content)}")  
-        
-        # Split by newline manually to debug
-        lines = file_content.split('\n')
-        print(f"Total lines: {len(lines)}")
-        for i, line in enumerate(lines):
-            print(f"Line {i}: {repr(line)}")
-    
+            return Response({'error': 'No file provided'}, status=400)
+        # Parse CSV
+        file_content = file.read().decode('utf-8')
         reader = csv.DictReader(StringIO(file_content))
-        rows_list = list(reader)
-        # print(f"Total rows parsed: {len(rows_list)}")
-    
+        rows = list(reader)
+        if not rows:
+            return Response({'error': 'CSV is empty'}, status=400)
         batch_id = str(uuid.uuid4())
-        task_ids = []
-        
-        for row in rows_list:
-            print(f"Processing row: {row}")
+        valid_rows = 0
+        for row in rows:
+            title = row.get('title', '').strip()
+            author = row.get('author', '').strip()
+            description = row.get('description', '').strip()
+            # Skip invalid rows
+            if not title or not author:
+                continue
+            
             task = BulkUploadTask.objects.create(
                 task_id=uuid.uuid4(),
                 batch_id=batch_id,
-                title=row.get('title'),
-                author=row.get('author'),
-                description=row.get('description', ''),
+                title=title,
+                author=author,
+                description=description,
                 status='pending'
-                # Remove: user=req.user
             )
+            
+            # Enqueue task for authenticated user
             celery_task = process_book_upload.delay(str(task.task_id), req.user.id)
             task.celery_task_id = celery_task.id
             task.save()
-            task_ids.append(str(task.task_id))
+            valid_rows += 1
+        
+        if valid_rows == 0:
+            return Response({'error': 'No valid rows in CSV'}, status=400)
         
         return Response({
             'batch_id': batch_id,
-            'task_ids': task_ids,
-            'total_rows': len(task_ids)
-        }, status=status.HTTP_202_ACCEPTED)
+            'task_ids': [str(task.task_id) for task in BulkUploadTask.objects.filter(batch_id=batch_id)],
+            'total_rows': valid_rows
+        }, status=202)
         
 
 class TaskStatusAPIView(APIView):
-    """
-    GET: Check status of a single task
-    ?task_id=<uuid>
-    """
-    permission_classes = [IsAuthenticated]
+    authentication_classes = []
+    permission_classes = []
     
     def get(self, request):
         task_id = request.query_params.get('task_id')
@@ -335,19 +429,15 @@ class TaskStatusAPIView(APIView):
         
         try:
             task = BulkUploadTask.objects.get(task_id=task_id)
+            # Optional: Check if task belongs to user (if you add user field to BulkUploadTask)
             serializer = BulkUploadTaskSerializer(task)
             return Response(serializer.data)
         except BulkUploadTask.DoesNotExist:
             return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
-       
 
 class BatchStatusAPIView(APIView):
-    """
-    GET: Check status of all tasks in a batch
-    ?batch_id=<uuid>
-    """
-
-    permission_classes = [IsAuthenticated]
+    authentication_classes = []
+    permission_classes = []
     
     def get(self, request):
         batch_id = request.query_params.get('batch_id')
@@ -356,14 +446,14 @@ class BatchStatusAPIView(APIView):
         
         try:
             tasks = BulkUploadTask.objects.filter(batch_id=batch_id)
+            # Optional: Filter by user if tasks have user field
             
-            # Summary stats
             summary = {
                 'batch_id': batch_id,
                 'total': tasks.count(),
                 'pending': tasks.filter(status='pending').count(),
                 'processing': tasks.filter(status='processing').count(),
-                'success': tasks.filter(status='completed').count(),
+                'success': tasks.filter(status='success').count(),
                 'failed': tasks.filter(status='failed').count(),
                 'tasks': BulkUploadTaskSerializer(tasks, many=True).data
             }
