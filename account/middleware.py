@@ -17,7 +17,7 @@ class CustomAuthMiddleware(MiddlewareMixin):
         Extracts token from Authorization header, validates it.
         """
 
-        # check this while testing testing
+       
         # Skip auth for certain paths (e.g., login, signup, static files)
         exempt_paths = ['/login', '/signup', '/admin', '/static', '/media']
         if any(request.path.startswith(path) for path in exempt_paths):
@@ -25,7 +25,9 @@ class CustomAuthMiddleware(MiddlewareMixin):
         
         # Extract token: Header first (API), then cookie (web)
         auth_header = request.META.get('HTTP_AUTHORIZATION', '')
-        token_str = auth_header[7:] if auth_header.startswith('Bearer ') else request.COOKIES.get('auth_token')
+        # im checking if header doesn exist i move forward but this should throw error
+
+        token_str = auth_header[7:] if auth_header.startswith('Bearer ') else request.COOKIES.get('auth_token') # this should throw error
         
         logging.info(f"Auth header: {auth_header}")
         logging.info(f"Token str: {token_str}")
