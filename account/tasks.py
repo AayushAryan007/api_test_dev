@@ -48,12 +48,14 @@ def process_book_upload(self, task_id_str, user_id):
         return {'error': 'Task record not found'}
     
     except Exception as exc:
-        # Update task as failed
-        task = BulkUploadTask.objects.get(task_id=task_id_str)
-        task.status = 'failed'
-        task.error_message = str(exc)
-        task.completed_at = timezone.now()
-        task.save()
-        
-        # Retry (exponential backoff)
-        raise self.retry(exc=exc, countdown=5)
+        # Mark task as failed and return (do not retry) so the batch API always shows the task
+        try:
+            task = BulkUploadTask.objects.get(task_id=task_id_str)
+            task.status = 'failed'
+            task.error_message = str(exc)
+            task.completed_at = timezone.now()
+            task.save()
+        except BulkUploadTask.DoesNotExist:
+            pass
+
+        return {'task_id': task_id_str, 'status': 'failed', 'error': str(exc)}

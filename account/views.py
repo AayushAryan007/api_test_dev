@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.shortcuts import render,redirect, get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
+from django.utils import timezone
 # from rest_framework_simplejwt.tokens import RefreshToken
 
 # from .decorators import book_owner_required
@@ -17,7 +18,7 @@ from django.template.loader import render_to_string
 from django.contrib.auth import authenticate, login , logout
 from django.contrib.auth.decorators import login_required
 from rest_framework.permissions import IsAuthenticated
-from rest_framework_simplejwt.authentication import JWTAuthentication
+# from rest_framework_simplejwt.authentication import JWTAuthentication
 from .tasks import process_book_upload
 import csv 
 import uuid
@@ -407,10 +408,8 @@ class BulkUploadBooksAPIView(APIView):
             title = row.get('title', '').strip()
             author = row.get('author', '').strip()
             description = row.get('description', '').strip()
-            # Skip invalid rows
-            if not title or not author:
-                continue
             
+            # create a task record for every CSV row (even invalid ones)
             task = BulkUploadTask.objects.create(
                 task_id=uuid.uuid4(),
                 batch_id=batch_id,
@@ -419,8 +418,16 @@ class BulkUploadBooksAPIView(APIView):
                 description=description,
                 status='pending'
             )
+
+            # If row is invalid, mark task failed immediately so it appears in the batch
+            if not title or not author:
+                task.status = 'failed'
+                task.error_message = 'missing title or author'
+                task.completed_at = timezone.now()
+                task.save()
+                continue
             
-            # Enqueue task for authenticated user
+            # Enqueue valid rows
             celery_task = process_book_upload.delay(str(task.task_id), user.id)
             task.celery_task_id = celery_task.id
             task.save()
@@ -431,8 +438,8 @@ class BulkUploadBooksAPIView(APIView):
         
         return Response({
             'batch_id': batch_id,
-            'task_ids': [str(task.task_id) for task in BulkUploadTask.objects.filter(batch_id=batch_id)],
-            'total_rows': valid_rows
+            'task_ids': [str(t) for t in BulkUploadTask.objects.filter(batch_id=batch_id).values_list('task_id', flat=True)],
+            'total_rows': len(rows)
         }, status=202)
         
 
@@ -463,19 +470,22 @@ class BatchStatusAPIView(APIView):
             return Response({'error': 'batch_id required'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            tasks = BulkUploadTask.objects.filter(batch_id=batch_id)
-            # Optional: Filter by user if tasks have user field
-            
+            import uuid as _uuid
+            batch_uuid = _uuid.UUID(batch_id)
+        except Exception:
+            return Response({'error': 'invalid batch_id'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            tasks_qs = BulkUploadTask.objects.filter(batch_id=batch_uuid).order_by('created_at')
             summary = {
-                'batch_id': batch_id,
-                'total': tasks.count(),
-                'pending': tasks.filter(status='pending').count(),
-                'processing': tasks.filter(status='processing').count(),
-                'success': tasks.filter(status='success').count(),
-                'failed': tasks.filter(status='failed').count(),
-                'tasks': BulkUploadTaskSerializer(tasks, many=True).data
+                'batch_id': str(batch_uuid),
+                'total': tasks_qs.count(),
+                'pending': tasks_qs.filter(status__iexact='pending').count(),
+                'processing': tasks_qs.filter(status__iexact='processing').count(),
+                'success': tasks_qs.filter(status__iexact='success').count(),
+                'failed': tasks_qs.filter(status__iexact='failed').count(),
+                'tasks': BulkUploadTaskSerializer(tasks_qs, many=True, context={'request': request}).data
             }
-            
             return Response(summary)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
